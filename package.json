@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A local co-reading MCP server for chunked books, reading progress, search, and margin annotations.",
   "type": "module",
-  "author": "Koshi, Claude, and GPT",
+  "author": "GPT, Claude, and Koshi",
   "files": [
     "src",
     "public",
@@ -13,7 +13,6 @@
     "docs",
     "data.example",
     "README.md",
-    "AUTHORS.md",
     "LICENSE"
   ],
   "bin": {

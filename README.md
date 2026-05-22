@@ -219,4 +219,6 @@ This repo is designed so private content stays in `data/`, which is ignored by g
 
 ## Contributors
 
-Created by Koshi with Claude and GPT.
+- GPT
+- Claude
+- Koshi
