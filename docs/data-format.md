@@ -70,3 +70,33 @@ Progress is stored in `data/progress.json`.
   }
 }
 ```
+
+## Session Context Ledger
+
+Submitted user notes use `data/reading_sessions.json` to avoid sending the same chunk text repeatedly inside one Claude session.
+
+```json
+{
+  "sessions": {
+    "claude-session-2026-05-22": {
+      "chunks": {
+        "demo-book/ch00": {
+          "bookId": "demo-book",
+          "chunkId": "ch00",
+          "sentAt": "2026-05-22T00:00:00.000Z",
+          "contextMode": "chunk-once-per-session"
+        }
+      },
+      "annotations": {
+        "ann_...": {
+          "bookId": "demo-book",
+          "chunkId": "ch00",
+          "submittedAt": "2026-05-22T00:00:00.000Z"
+        }
+      }
+    }
+  }
+}
+```
+
+Changing `sessionId` intentionally resets chunk context dedupe, so cross-session handoffs include the relevant chunk text again.

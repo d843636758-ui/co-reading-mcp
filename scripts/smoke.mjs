@@ -37,6 +37,10 @@ function request(method, params) {
   return new Promise((resolve) => pending.set(id, resolve));
 }
 
+function contentJson(response) {
+  return JSON.parse(response.result.content[0].text);
+}
+
 await request("initialize", {});
 const list = await request("tools/call", { name: "reading_list_books", arguments: {} });
 const read = await request("tools/call", {
@@ -49,11 +53,41 @@ const search = await request("tools/call", {
 });
 const firstSubmit = await request("tools/call", {
   name: "reading_submit_user_notes",
-  arguments: { bookId: "demo-book" },
+  arguments: { bookId: "demo-book", sessionId: "session-a" },
+});
+const sameSessionNote = await request("tools/call", {
+  name: "reading_annotate_passage",
+  arguments: {
+    bookId: "demo-book",
+    chunkId: "ch00",
+    quote: "The reader can mark a sentence",
+    note: "Another local user note in the same chunk.",
+    author: "user",
+    status: "open",
+  },
+});
+const sameSessionSubmit = await request("tools/call", {
+  name: "reading_submit_user_notes",
+  arguments: { bookId: "demo-book", sessionId: "session-a" },
+});
+const newSessionNote = await request("tools/call", {
+  name: "reading_annotate_passage",
+  arguments: {
+    bookId: "demo-book",
+    chunkId: "ch00",
+    quote: "The reader can mark a sentence",
+    note: "A later note after changing sessions.",
+    author: "user",
+    status: "open",
+  },
+});
+const newSessionSubmit = await request("tools/call", {
+  name: "reading_submit_user_notes",
+  arguments: { bookId: "demo-book", sessionId: "session-b" },
 });
 const secondSubmit = await request("tools/call", {
   name: "reading_submit_user_notes",
-  arguments: { bookId: "demo-book" },
+  arguments: { bookId: "demo-book", sessionId: "session-b" },
 });
 const reply = await request("tools/call", {
   name: "reading_reply_to_annotation",
@@ -76,10 +110,28 @@ if (!read.result?.content?.[0]?.text.includes("A Small Lamp")) {
 if (!search.result?.content?.[0]?.text.includes("margin")) {
   throw new Error("reading_search_chunks did not return a margin snippet");
 }
-if (!firstSubmit.result?.content?.[0]?.text.includes('"count": 1')) {
+if (contentJson(firstSubmit).count !== 1) {
   throw new Error("reading_submit_user_notes did not submit the open user note");
 }
-if (!secondSubmit.result?.content?.[0]?.text.includes('"count": 0')) {
+if (!contentJson(firstSubmit).context.chunks[0]?.text.includes("A Small Lamp")) {
+  throw new Error("first session submit did not include chunk text");
+}
+if (!contentJson(sameSessionNote).id) {
+  throw new Error("reading_annotate_passage did not create the same-session user note");
+}
+if (contentJson(sameSessionSubmit).context.chunks.length !== 0) {
+  throw new Error("same-session submit repeated chunk text");
+}
+if (contentJson(sameSessionSubmit).context.omittedChunks[0]?.reason !== "already-sent-in-session") {
+  throw new Error("same-session submit did not explain omitted chunk context");
+}
+if (!contentJson(newSessionNote).id) {
+  throw new Error("reading_annotate_passage did not create the new-session user note");
+}
+if (!contentJson(newSessionSubmit).context.chunks[0]?.text.includes("A Small Lamp")) {
+  throw new Error("new-session submit did not re-include chunk text");
+}
+if (contentJson(secondSubmit).count !== 0) {
   throw new Error("reading_submit_user_notes submitted the same note twice");
 }
 if (!reply.result?.content?.[0]?.text.includes('"parentId": "ann_demo_user_001"')) {

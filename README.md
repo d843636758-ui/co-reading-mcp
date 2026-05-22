@@ -66,7 +66,10 @@ Runtime state is stored outside book content:
 data/
   annotations.jsonl
   progress.json
+  reading_sessions.json
 ```
+
+`reading_submit_user_notes` includes full chunk text once per `sessionId` by default, then sends only new notes for the same chunk in that session. Use a new `sessionId` when Claude starts a new conversation/session so the relevant chunk context is sent again.
 
 ## Tools
 

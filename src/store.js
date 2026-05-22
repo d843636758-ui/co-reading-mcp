@@ -12,6 +12,7 @@ export const dataDir = process.env.READING_MCP_DATA_DIR
 const booksDir = path.join(dataDir, "books");
 const annotationsPath = path.join(dataDir, "annotations.jsonl");
 const progressPath = path.join(dataDir, "progress.json");
+const sessionsPath = path.join(dataDir, "reading_sessions.json");
 
 async function readJson(filePath, fallback) {
   try {
@@ -154,6 +155,107 @@ export async function loadProgress() {
   return readJson(progressPath, {});
 }
 
+async function loadSessionLedger() {
+  const ledger = await readJson(sessionsPath, { sessions: {} });
+  ledger.sessions ||= {};
+  return ledger;
+}
+
+async function saveSessionLedger(ledger) {
+  await writeJson(sessionsPath, ledger);
+}
+
+function chunkContextKey(bookId, chunkId) {
+  return `${bookId}/${chunkId}`;
+}
+
+async function buildSubmissionContext(notes, options = {}) {
+  const sessionId = options.sessionId || "default";
+  const includeContext = options.includeContext !== false;
+  const forceChunkContext = options.forceChunkContext === true;
+  const contextMode = options.contextMode || "chunk-once-per-session";
+  const submittedAt = options.submittedAt || new Date().toISOString();
+  const ledger = await loadSessionLedger();
+  const session = ledger.sessions[sessionId] || { chunks: {}, annotations: {} };
+  session.chunks ||= {};
+  session.annotations ||= {};
+
+  const chunks = [];
+  const omittedChunks = [];
+  const seenChunkKeys = new Set();
+
+  if (includeContext) {
+    for (const note of notes) {
+      const key = chunkContextKey(note.bookId, note.chunkId);
+      if (seenChunkKeys.has(key)) continue;
+      seenChunkKeys.add(key);
+
+      if (contextMode === "notes-only") {
+        omittedChunks.push({
+          bookId: note.bookId,
+          chunkId: note.chunkId,
+          reason: "notes-only",
+          sentAt: null,
+        });
+        continue;
+      }
+
+      const sentBefore = Boolean(session.chunks[key]);
+      const shouldInclude =
+        contextMode === "chunk-always" ||
+        forceChunkContext ||
+        (contextMode === "chunk-once-per-session" && !sentBefore);
+
+      if (!shouldInclude) {
+        omittedChunks.push({
+          bookId: note.bookId,
+          chunkId: note.chunkId,
+          reason: "already-sent-in-session",
+          sentAt: session.chunks[key]?.sentAt || null,
+        });
+        continue;
+      }
+
+      const chunk = await readChunk(note.bookId, note.chunkId);
+      chunks.push({
+        bookId: note.bookId,
+        chunkId: note.chunkId,
+        title: chunk.chunk.title,
+        bookTitle: chunk.title,
+        author: chunk.author,
+        prevId: chunk.prevId,
+        nextId: chunk.nextId,
+        text: chunk.text,
+      });
+      session.chunks[key] = {
+        bookId: note.bookId,
+        chunkId: note.chunkId,
+        sentAt: submittedAt,
+        contextMode,
+      };
+    }
+  }
+
+  for (const note of notes) {
+    session.annotations[note.id] = {
+      bookId: note.bookId,
+      chunkId: note.chunkId,
+      submittedAt,
+    };
+  }
+
+  ledger.sessions[sessionId] = session;
+  if (notes.length > 0) await saveSessionLedger(ledger);
+
+  return {
+    sessionId,
+    contextMode,
+    chunks,
+    omittedChunks,
+    noteCount: notes.length,
+  };
+}
+
 export async function markRead(bookId, chunkId) {
   await loadManifest(bookId);
   const progress = await loadProgress();
@@ -234,7 +336,14 @@ export async function annotatePassage(input) {
   return annotation;
 }
 
-export async function submitUserNotes({ bookId, chunkId } = {}) {
+export async function submitUserNotes({
+  bookId,
+  chunkId,
+  sessionId = "default",
+  contextMode = "chunk-once-per-session",
+  includeContext = true,
+  forceChunkContext = false,
+} = {}) {
   const annotations = await readAllAnnotations();
   const submittedAt = new Date().toISOString();
   const submitted = [];
@@ -257,14 +366,24 @@ export async function submitUserNotes({ bookId, chunkId } = {}) {
     await writeJsonl(annotationsPath, updated);
   }
 
+  const context = await buildSubmissionContext(submitted, {
+    sessionId,
+    contextMode,
+    includeContext,
+    forceChunkContext,
+    submittedAt,
+  });
+
   return {
     submittedAt,
+    sessionId,
     count: submitted.length,
     notes: submitted,
+    context,
     message:
       submitted.length === 0
         ? "No open user notes to submit."
-        : "Submitted user notes have been marked submitted and will not be sent again.",
+        : "Submitted user notes have been marked submitted. Chunk text is included once per session by default.",
   };
 }
 

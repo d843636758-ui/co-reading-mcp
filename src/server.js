@@ -106,12 +106,19 @@ const tools = [
   {
     name: "reading_submit_user_notes",
     description:
-      "Submit all open user notes for Claude review and mark them submitted so they are not sent again.",
+      "Submit open user notes for Claude review. By default, include each chunk's full text once per session and mark notes submitted so they are not sent again.",
     inputSchema: {
       type: "object",
       properties: {
         bookId: { type: "string" },
         chunkId: { type: "string" },
+        sessionId: { type: "string" },
+        contextMode: {
+          type: "string",
+          enum: ["chunk-once-per-session", "chunk-always", "notes-only"],
+        },
+        includeContext: { type: "boolean" },
+        forceChunkContext: { type: "boolean" },
       },
       additionalProperties: false,
     },

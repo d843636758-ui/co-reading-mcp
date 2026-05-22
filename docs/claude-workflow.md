@@ -49,7 +49,20 @@ The system is bidirectional. A companion reading UI can let the user mark passag
 }
 ```
 
-When the user taps a “Send to Claude” button, call `reading_submit_user_notes`. The server returns one batch and changes those notes to `status: "submitted"`, so a later tap does not send duplicates.
+When the user taps a “Send to Claude” button, call `reading_submit_user_notes` with the current Claude session id:
+
+```json
+{
+  "bookId": "demo-book",
+  "sessionId": "claude-session-2026-05-22"
+}
+```
+
+The server returns one batch and changes those notes to `status: "submitted"`, so a later tap does not send duplicates.
+
+The default context policy is `chunk-once-per-session`. The first submitted note for a chunk includes the full chunk text in `context.chunks`, so Claude can read the section before replying. Later notes from the same chunk and session only include the new notes and quote anchors. If the user moves to a new chunk, the first note for that chunk includes that chunk text. If Claude starts a new session, use a new `sessionId` and the chunk text will be sent again.
+
+Use `contextMode: "notes-only"` only when Claude already has the relevant text in its active context. Use `forceChunkContext: true` when Claude asks to see the section again.
 
 Claude can then answer under a user note:
 

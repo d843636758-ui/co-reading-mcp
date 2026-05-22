@@ -83,12 +83,26 @@ All fields are optional except `bookId` in most practical use.
 Input:
 
 ```json
-{ "bookId": "demo-book" }
+{
+  "bookId": "demo-book",
+  "sessionId": "claude-session-2026-05-22",
+  "contextMode": "chunk-once-per-session"
+}
 ```
 
 Finds all user annotations with `status: "open"`, returns them as one batch for Claude, and rewrites them to `status: "submitted"` so the same notes are not sent again.
 
 This is the tool a companion app should call when the user taps “Send notes to Claude”.
+
+By default, `contextMode` is `chunk-once-per-session`: the first submitted user note for a chunk includes that chunk's full text in `context.chunks`. Later notes for the same chunk and `sessionId` only send the new notes, with the repeated chunk listed in `context.omittedChunks`. A new `sessionId` starts fresh and includes the chunk again.
+
+Supported context modes:
+
+- `chunk-once-per-session`: default; send each chunk once per Claude session
+- `chunk-always`: include full chunk text every time
+- `notes-only`: send only the submitted notes and quote anchors
+
+Set `forceChunkContext: true` to re-send chunk text inside the same session.
 
 ## `reading_reply_to_annotation`
 
