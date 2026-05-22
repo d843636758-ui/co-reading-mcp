@@ -36,6 +36,73 @@ Returns matching snippets.
 
 Chunk text is cached by file signature after first read. Search is still a simple substring scan, but repeated searches avoid re-reading every chunk from disk.
 
+## `reading_import_book`
+
+Input:
+
+```json
+{
+  "filename": "book.epub",
+  "dataBase64": "...",
+  "bookId": "optional-stable-id",
+  "overwrite": false
+}
+```
+
+Imports one EPUB or TXT/Markdown file from base64 content. Use this when the file fits inside one MCP request. `dataBase64` can be raw base64 or a `data:*;base64,...` URL.
+
+For TXT/Markdown imports, optional fields mirror `scripts/import_text.py`:
+
+```json
+{
+  "filename": "book.txt",
+  "dataBase64": "...",
+  "title": "Book Title",
+  "author": "Author",
+  "headingRegex": "^Chapter\\s+\\w+",
+  "minSectionChars": 100,
+  "maxChars": 6000
+}
+```
+
+The server validates the file type, upload size, and `bookId`, writes the book into `data/books`, and returns the imported `bookId`, title, and chunk count.
+
+## Chunked Import
+
+Use chunked import when a file is too large for one JSON-RPC body.
+
+1. Start:
+
+```json
+{
+  "filename": "large.epub",
+  "expectedBytes": 1234567,
+  "bookId": "large-book"
+}
+```
+
+Call `reading_import_begin` and keep the returned `uploadId`.
+
+2. Append base64 parts:
+
+```json
+{
+  "uploadId": "...",
+  "index": 0,
+  "dataBase64": "..."
+}
+```
+
+Call `reading_import_part` once per binary part. Each part should be independently base64-encoded; do not split a single base64 string at arbitrary characters.
+
+3. Finish:
+
+```json
+{ "uploadId": "..." }
+```
+
+Call `reading_import_finish` to run the importer. Use `reading_import_cancel` to discard an unfinished upload.
+
 ## `reading_annotate_passage`
 
 Input:

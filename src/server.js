@@ -14,6 +14,13 @@ import {
   searchChunks,
   submitUserNotes,
 } from "./store.js";
+import {
+  appendImportPart,
+  beginImport,
+  cancelImport,
+  finishImport,
+  importBook,
+} from "./importer.js";
 
 const protocolVersion = "2024-11-05";
 
@@ -64,6 +71,89 @@ export const tools = [
       additionalProperties: false,
     },
     annotations: { title: "Search Chunks", readOnlyHint: true },
+  },
+  {
+    name: "reading_import_book",
+    description:
+      "Import one EPUB or TXT file from base64 content into the reading library. Use this for files small enough for one MCP request.",
+    inputSchema: {
+      type: "object",
+      required: ["filename", "dataBase64"],
+      properties: {
+        filename: { type: "string" },
+        dataBase64: { type: "string" },
+        format: { type: "string", enum: ["epub", "txt", "text", "md", "markdown"] },
+        bookId: { type: "string" },
+        title: { type: "string" },
+        author: { type: "string" },
+        maxChars: { type: "number" },
+        headingRegex: { type: "string" },
+        minSectionChars: { type: "number" },
+        overwrite: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: "Import Book" },
+  },
+  {
+    name: "reading_import_begin",
+    description:
+      "Start a chunked EPUB/TXT import. Use this when the file is too large for one reading_import_book request.",
+    inputSchema: {
+      type: "object",
+      required: ["filename"],
+      properties: {
+        filename: { type: "string" },
+        format: { type: "string", enum: ["epub", "txt", "text", "md", "markdown"] },
+        expectedBytes: { type: "number" },
+        bookId: { type: "string" },
+        title: { type: "string" },
+        author: { type: "string" },
+        maxChars: { type: "number" },
+        headingRegex: { type: "string" },
+        minSectionChars: { type: "number" },
+        overwrite: { type: "boolean" },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: "Begin Import" },
+  },
+  {
+    name: "reading_import_part",
+    description: "Append one base64 file part to an active chunked import.",
+    inputSchema: {
+      type: "object",
+      required: ["uploadId", "dataBase64"],
+      properties: {
+        uploadId: { type: "string" },
+        dataBase64: { type: "string" },
+        index: { type: "number" },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: "Import Part" },
+  },
+  {
+    name: "reading_import_finish",
+    description: "Finish a chunked import and add the uploaded EPUB/TXT to the reading library.",
+    inputSchema: {
+      type: "object",
+      required: ["uploadId"],
+      properties: { uploadId: { type: "string" } },
+      additionalProperties: false,
+    },
+    annotations: { title: "Finish Import" },
+  },
+  {
+    name: "reading_import_cancel",
+    description: "Cancel a chunked import and delete its temporary upload file.",
+    inputSchema: {
+      type: "object",
+      required: ["uploadId"],
+      properties: { uploadId: { type: "string" } },
+      additionalProperties: false,
+    },
+    annotations: { title: "Cancel Import" },
   },
   {
     name: "reading_annotate_passage",
@@ -198,6 +288,16 @@ export async function callTool(name, args = {}) {
       return textContent(await readChunk(args.bookId, args.chunkId));
     case "reading_search_chunks":
       return textContent(await searchChunks(args));
+    case "reading_import_book":
+      return textContent(await importBook(args));
+    case "reading_import_begin":
+      return textContent(await beginImport(args));
+    case "reading_import_part":
+      return textContent(await appendImportPart(args));
+    case "reading_import_finish":
+      return textContent(await finishImport(args));
+    case "reading_import_cancel":
+      return textContent(await cancelImport(args));
     case "reading_annotate_passage":
       return textContent(await annotatePassage(args));
     case "reading_list_annotations":
@@ -225,8 +325,9 @@ export async function handle(message) {
       capabilities: { tools: {} },
       instructions:
         `Use this server as a shared co-reading surface. ` +
-        `Claude can read chunked books, search passages, track progress, leave margin annotations, ` +
+        `Claude can import EPUB/TXT uploads, read chunked books, search passages, track progress, leave margin annotations, ` +
         `reply under user notes, and call reading_submit_user_notes when the human sends staged notes. ` +
+        `Use reading_import_book for small uploads, or reading_import_begin/part/finish for large files. ` +
         `If this server is running through src/server-sse.js, the same process can also serve the human reader at /, REST API at /api/*, SSE MCP at /sse, and JSON-RPC POST at /mcp. ` +
         `Data dir: ${dataDir}`,
     });

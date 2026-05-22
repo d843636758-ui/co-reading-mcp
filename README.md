@@ -86,7 +86,8 @@ Environment variables:
 - `MCP_SSE_HOST`: listen host, default `0.0.0.0`
 - `MCP_AUTH_TOKEN`: bearer token required by remote clients
 - `MCP_CORS_ORIGIN`: CORS origin, default `*`
-- `MCP_MAX_BODY_BYTES`: max JSON-RPC POST body size, default `1000000`
+- `MCP_MAX_BODY_BYTES`: max JSON-RPC POST body size, default `25000000`
+- `READING_IMPORT_MAX_BYTES`: max EPUB/TXT upload size, default `25000000`
 
 Do not expose the remote server on the public internet without HTTPS and `MCP_AUTH_TOKEN`. Static reader files are public, but `/api/*`, `/sse`, `/messages`, `/mcp`, and `/health` require the bearer token when `MCP_AUTH_TOKEN` is set. If you use nginx, Caddy, or cloudflared, proxy `/`, `/api/*`, `/sse`, `/messages`, and `/mcp` to the same local process and make sure streaming responses are not buffered.
 
@@ -114,6 +115,34 @@ EPUB:
 ```bash
 python3 scripts/import_epub.py ./book.epub --out ./data/books
 ```
+
+Claude can also import books through MCP, which is useful on claude.ai or mobile devices where the user cannot SSH into the server:
+
+- `reading_import_book`: one EPUB/TXT as a base64 payload
+- `reading_import_begin` / `reading_import_part` / `reading_import_finish`: chunked upload for larger files
+
+For example, after a user drops `book.epub` into a Claude chat, Claude can read the file, base64-encode it, and call `reading_import_book`:
+
+```json
+{
+  "filename": "book.epub",
+  "dataBase64": "...",
+  "bookId": "optional-stable-id"
+}
+```
+
+TXT imports can pass the same heading options as the command-line script:
+
+```json
+{
+  "filename": "book.txt",
+  "dataBase64": "...",
+  "title": "Book Title",
+  "headingRegex": "^Chapter\\s+\\w+"
+}
+```
+
+The import tools write into `data/books` immediately; no server restart is needed.
 
 Both importers create:
 
@@ -144,6 +173,11 @@ data/
 - `reading_list_chunks`
 - `reading_read_chunk`
 - `reading_search_chunks`
+- `reading_import_book`
+- `reading_import_begin`
+- `reading_import_part`
+- `reading_import_finish`
+- `reading_import_cancel`
 - `reading_annotate_passage`
 - `reading_list_annotations`
 - `reading_submit_user_notes`
@@ -166,6 +200,7 @@ The bundled reader is intentionally small: it is a reference UI, not a required 
 - `POST /api/submit-notes`
 - `POST /api/mark-read`
 - `GET /api/search?q=...&bookId=...`
+- `POST /api/import`
 
 Human notes are saved as open local notes first. Pressing "Send to Claude" calls `reading_submit_user_notes`, includes chunk context according to the session policy, marks those notes submitted, and avoids resending the same open notes.
 

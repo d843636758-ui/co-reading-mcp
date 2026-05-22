@@ -10,7 +10,7 @@ const port = Number(process.env.MCP_SSE_PORT || process.env.PORT || 3100);
 const host = process.env.MCP_SSE_HOST || "0.0.0.0";
 const authToken = process.env.MCP_AUTH_TOKEN || "";
 const corsOrigin = process.env.MCP_CORS_ORIGIN || "*";
-const maxBodyBytes = Number(process.env.MCP_MAX_BODY_BYTES || 1_000_000);
+const maxBodyBytes = Number(process.env.MCP_MAX_BODY_BYTES || process.env.READING_IMPORT_MAX_BYTES || 25_000_000);
 const sessions = new Map();
 
 function sendSse(res, event, data) {

@@ -207,6 +207,76 @@ const search = await request("tools/call", {
   name: "reading_search_chunks",
   arguments: { bookId: "anthropic-guidelines", query: "values" },
 });
+const importText = [
+  "Chapter Alpha",
+  "",
+  "Alpha imported from a single MCP base64 payload.",
+  "",
+  "Chapter Beta",
+  "",
+  "Beta imported from a single MCP base64 payload.",
+].join("\n");
+const mcpImport = await request("tools/call", {
+  name: "reading_import_book",
+  arguments: {
+    filename: "mcp-import.txt",
+    dataBase64: Buffer.from(importText, "utf8").toString("base64"),
+    bookId: "mcp-import",
+    title: "MCP Import",
+    headingRegex: "^Chapter\\s+\\w+",
+  },
+});
+const chunkedImportText = [
+  "Section One",
+  "",
+  "Chunked import part one.",
+  "",
+  "Section Two",
+  "",
+  "Chunked import part two.",
+].join("\n");
+const chunkedBytes = Buffer.from(chunkedImportText, "utf8");
+const chunkedBegin = await request("tools/call", {
+  name: "reading_import_begin",
+  arguments: {
+    filename: "chunked-import.txt",
+    bookId: "chunked-import",
+    title: "Chunked Import",
+    headingRegex: "^Section\\s+\\w+",
+    expectedBytes: chunkedBytes.length,
+  },
+});
+const chunkedUploadId = contentJson(chunkedBegin).uploadId;
+const splitAt = Math.ceil(chunkedBytes.length / 2);
+const chunkedPartA = await request("tools/call", {
+  name: "reading_import_part",
+  arguments: {
+    uploadId: chunkedUploadId,
+    dataBase64: chunkedBytes.subarray(0, splitAt).toString("base64"),
+    index: 0,
+  },
+});
+const chunkedPartB = await request("tools/call", {
+  name: "reading_import_part",
+  arguments: {
+    uploadId: chunkedUploadId,
+    dataBase64: chunkedBytes.subarray(splitAt).toString("base64"),
+    index: 1,
+  },
+});
+const chunkedFinish = await request("tools/call", {
+  name: "reading_import_finish",
+  arguments: { uploadId: chunkedUploadId },
+});
+const badImportBookId = await request("tools/call", {
+  name: "reading_import_book",
+  arguments: {
+    filename: "bad-import.txt",
+    dataBase64: Buffer.from("Bad import", "utf8").toString("base64"),
+    bookId: "../bad-import",
+    title: "Bad Import",
+  },
+});
 const firstSubmit = await request("tools/call", {
   name: "reading_submit_user_notes",
   arguments: { bookId: "anthropic-guidelines", sessionId: "session-a" },
@@ -333,6 +403,19 @@ const httpNote = await fetchJson("/api/annotations", {
     note: "HTTP reader note.",
   },
 });
+const httpImport = await fetchJson("/api/import", {
+  method: "POST",
+  body: {
+    filename: "http-import.txt",
+    dataBase64: Buffer.from(
+      ["HTTP One", "", "Imported through the REST API.", "", "HTTP Two", "", "Also imported."].join("\n"),
+      "utf8",
+    ).toString("base64"),
+    bookId: "http-import",
+    title: "HTTP Import",
+    headingRegex: "^HTTP\\s+\\w+",
+  },
+});
 const readerHtml = await fetch(`http://127.0.0.1:${httpPort}/`);
 httpServer.kill();
 const ssePort = httpPort + 1;
@@ -435,6 +518,21 @@ if (!read.result?.content?.[0]?.text.includes("Claude and the mission of Anthrop
 if (!search.result?.content?.[0]?.text.includes("values")) {
   throw new Error("reading_search_chunks did not return a values snippet");
 }
+if (contentJson(mcpImport).bookId !== "mcp-import" || contentJson(mcpImport).chunkCount !== 2) {
+  throw new Error("reading_import_book did not import TXT headings");
+}
+if (!chunkedUploadId) {
+  throw new Error("reading_import_begin did not return an uploadId");
+}
+if (contentJson(chunkedPartA).parts !== 1 || contentJson(chunkedPartB).parts !== 2) {
+  throw new Error("reading_import_part did not count chunked upload parts");
+}
+if (contentJson(chunkedFinish).bookId !== "chunked-import" || contentJson(chunkedFinish).chunkCount !== 2) {
+  throw new Error("reading_import_finish did not import chunked TXT upload");
+}
+if (!badImportBookId.error?.message.includes("bookId may only contain")) {
+  throw new Error("reading_import_book did not reject unsafe bookId");
+}
 if (contentJson(firstSubmit).count !== 1) {
   throw new Error("reading_submit_user_notes did not submit the open user note");
 }
@@ -485,6 +583,9 @@ if (!httpChunk.text.includes("Claude and the mission of Anthropic")) {
 }
 if (!httpNote.id) {
   throw new Error("HTTP API did not create a user note");
+}
+if (httpImport.bookId !== "http-import" || httpImport.chunkCount !== 2) {
+  throw new Error("HTTP API did not import a book");
 }
 if (!readerHtml.ok || !(await readerHtml.text()).includes("Co-Reading")) {
   throw new Error("HTTP reader did not serve the web UI");
