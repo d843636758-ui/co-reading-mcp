@@ -73,6 +73,25 @@ def sections_from_html_headings(raw: str) -> list[dict[str, str]]:
     return sections
 
 
+def should_split_html_by_headings(raw: str, text: str, ordered_count: int) -> bool:
+    sections = sections_from_html_headings(raw)
+    return len(sections) >= 2 and (ordered_count == 1 or len(text) > 12000)
+
+
+def clean_metadata_title(value: str | None, fallback: str) -> str:
+    title = (value or "").strip()
+    if not title or title.lower() in {"unknown", "untitled", "administrator"} or len(title) <= 1:
+        return fallback
+    return title
+
+
+def clean_metadata_author(value: str | None, title: str) -> str | None:
+    author = (value or "").strip()
+    if not author or author.lower() in {"unknown", "administrator"} or author == title:
+        return None
+    return author
+
+
 def find_opf_path(zf: zipfile.ZipFile) -> str | None:
     try:
         root = ET.fromstring(zf.read(CONTAINER))
@@ -209,19 +228,17 @@ def read_epub(path: Path) -> tuple[str | None, str | None, list[dict[str, str]]]
                 raw = zf.read(name).decode("utf-8", errors="ignore")
             except KeyError:
                 continue
-            if len(ordered) == 1:
-                internal_sections = sections_from_html_headings(raw)
-                if internal_sections:
-                    for section_index, section in enumerate(internal_sections):
-                        sections.append(
-                            {
-                                "title": section["title"],
-                                "text": section["text"],
-                                "sourcePath": f"{name}#heading-{section_index + 1}",
-                            }
-                        )
-                    continue
             text = text_from_html(raw)
+            if should_split_html_by_headings(raw, text, len(ordered)):
+                for section_index, section in enumerate(sections_from_html_headings(raw)):
+                    sections.append(
+                        {
+                            "title": section["title"],
+                            "text": section["text"],
+                            "sourcePath": f"{name}#heading-{section_index + 1}",
+                        }
+                    )
+                continue
             if text:
                 section_title = toc_titles.get(name) or title_from_html(raw) or f"Section {index + 1}"
                 sections.append({"title": section_title, "text": text, "sourcePath": name})
@@ -240,8 +257,12 @@ def main() -> None:
     args = parser.parse_args()
 
     title, author, sections = read_epub(args.input)
-    final_title = args.title or title or args.input.stem
-    final_author = args.author or author
+    final_title = args.title or clean_metadata_title(title, args.input.stem)
+    final_author = args.author or clean_metadata_author(author, final_title)
+    if not final_author and args.title and title and title != final_title:
+        maybe_author = clean_metadata_title(title, "")
+        if maybe_author and maybe_author != final_title:
+            final_author = maybe_author
     book_id = args.book_id or slugify(final_title)
 
     if not sections:

@@ -128,8 +128,8 @@ function importerArgs(filePath, options) {
 
   if (options.format === "txt") {
     args.push("--title", options.title || titleFromFilename(options.filename));
-  } else if (options.title) {
-    args.push("--title", options.title);
+  } else {
+    args.push("--title", options.title || titleFromFilename(options.filename));
   }
 
   if (options.author) args.push("--author", options.author);
