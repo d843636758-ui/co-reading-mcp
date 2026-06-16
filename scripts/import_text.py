@@ -212,7 +212,23 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    text = args.input.read_text(encoding="utf-8")
+    data = args.input.read_bytes()
+for encoding in (
+    "utf-8-sig",
+    "utf-16",
+    "utf-16-le",
+    "utf-16-be",
+    "gb18030",
+    "gbk",
+    "big5",
+):
+    try:
+        text = data.decode(encoding)
+        break
+    except UnicodeDecodeError:
+        continue
+else:
+    text = data.decode("utf-8", errors="replace")
     if args.heading_regex:
         sections = sections_from_heading_regex(text, args.heading_regex, args.min_section_chars)
         if sections:
