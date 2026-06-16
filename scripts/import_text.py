@@ -23,6 +23,29 @@ def count_words(text: str) -> int:
     return len(words)
 
 
+def read_text_compat(path: Path) -> str:
+    """Read text files with common encodings used by Chinese TXT ebooks."""
+    data = path.read_bytes()
+
+    encodings = (
+        "utf-8-sig",
+        "utf-16",
+        "utf-16-le",
+        "utf-16-be",
+        "gb18030",
+        "gbk",
+        "big5",
+    )
+
+    for encoding in encodings:
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+
+    return data.decode("utf-8", errors="replace")
+
+
 def is_semantic_break(prev: str, current: str) -> bool:
     break_markers = {"***", "---", "* * *", "◆", "■", "●", "○", "☆"}
     if prev.strip() in break_markers or current.strip() in break_markers:
@@ -41,7 +64,6 @@ def split_text(text: str, max_chars: int) -> list[str]:
 
     chunks: list[str] = []
     start = 0
-
     while start < len(paragraphs):
         current_len = 0
         end = start
@@ -60,6 +82,7 @@ def split_text(text: str, max_chars: int) -> list[str]:
         search_start = max(start + 1, end - 5)
         search_end = min(len(paragraphs), end + 3)
         best_cut = end
+
         for index in range(search_end - 1, search_start - 1, -1):
             if is_semantic_break(paragraphs[index - 1], paragraphs[index]):
                 best_cut = index
@@ -90,13 +113,20 @@ def write_book_sections(
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
     planned_chunks = []
+
     for section_index, section in enumerate(sections):
         section_title = section.get("title") or f"Section {section_index + 1}"
         section_text = section.get("text") or ""
         section_chunks = split_text(section_text, max_chars)
+
         for part_index, chunk in enumerate(section_chunks):
             part_count = len(section_chunks)
-            display_title = section_title if part_count == 1 else f"{section_title} Part {part_index + 1}/{part_count}"
+            display_title = (
+                section_title
+                if part_count == 1
+                else f"{section_title} Part {part_index + 1}/{part_count}"
+            )
+
             planned_chunks.append(
                 {
                     "text": chunk,
@@ -110,11 +140,14 @@ def write_book_sections(
             )
 
     manifest_chunks = []
+
     for index, planned in enumerate(planned_chunks):
         cid = chunk_id(index)
         path = chunks_dir / f"{cid}.txt"
         chunk = planned["text"]
+
         path.write_text(f"# {planned['title']}\n\n{chunk.strip()}\n", encoding="utf-8")
+
         manifest_chunks.append(
             {
                 "id": cid,
@@ -142,10 +175,12 @@ def write_book_sections(
         "source": source or {"type": "text"},
         "chunks": manifest_chunks,
     }
+
     (book_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
     return book_dir
 
 
@@ -175,17 +210,21 @@ def sections_from_heading_regex(
 ) -> list[dict[str, Any]]:
     pattern = re.compile(heading_regex, re.MULTILINE)
     matches = list(pattern.finditer(text))
+
     if not matches:
         return []
 
     sections: list[dict[str, Any]] = []
+
     for index, match in enumerate(matches):
         start = match.start()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         section_text = text[start:end].strip()
         title = match.group(1).strip() if match.groups() else match.group(0).strip()
+
         if section_text and len(section_text) >= min_section_chars:
             sections.append({"title": title, "text": section_text, "sourcePath": None})
+
     return sections
 
 
@@ -200,8 +239,9 @@ def main() -> None:
     parser.add_argument(
         "--heading-regex",
         help=(
-            "Optional multiline regex for TXT section headings. If the regex has a capture "
-            "group, group 1 becomes the section title; otherwise the full match is used."
+            "Optional multiline regex for TXT section headings. "
+            "If the regex has a capture group, group 1 becomes the section title; "
+            "otherwise the full match is used."
         ),
     )
     parser.add_argument(
@@ -210,27 +250,18 @@ def main() -> None:
         default=1,
         help="When using --heading-regex, skip sections shorter than this many characters.",
     )
+
     args = parser.parse_args()
 
-    data = args.input.read_bytes()
-for encoding in (
-    "utf-8-sig",
-    "utf-16",
-    "utf-16-le",
-    "utf-16-be",
-    "gb18030",
-    "gbk",
-    "big5",
-):
-    try:
-        text = data.decode(encoding)
-        break
-    except UnicodeDecodeError:
-        continue
-else:
-    text = data.decode("utf-8", errors="replace")
+    text = read_text_compat(args.input)
+
     if args.heading_regex:
-        sections = sections_from_heading_regex(text, args.heading_regex, args.min_section_chars)
+        sections = sections_from_heading_regex(
+            text,
+            args.heading_regex,
+            args.min_section_chars,
+        )
+
         if sections:
             book_dir = write_book_sections(
                 sections,
@@ -246,9 +277,24 @@ else:
                 },
             )
         else:
-            book_dir = write_book(text, args.title, args.author, args.out, args.book_id, args.max_chars)
+            book_dir = write_book(
+                text,
+                args.title,
+                args.author,
+                args.out,
+                args.book_id,
+                args.max_chars,
+            )
     else:
-        book_dir = write_book(text, args.title, args.author, args.out, args.book_id, args.max_chars)
+        book_dir = write_book(
+            text,
+            args.title,
+            args.author,
+            args.out,
+            args.book_id,
+            args.max_chars,
+        )
+
     print(book_dir)
 
 
