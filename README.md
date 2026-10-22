@@ -101,6 +101,25 @@ For Claude custom connectors, prefer the `/mcp` URL. `/sse` remains available fo
 
 Do not expose the remote server on the public internet without HTTPS and `MCP_AUTH_TOKEN`. When `MCP_AUTH_TOKEN` is set, the reader, static assets, `/api/*`, `/sse`, `/messages`, `/mcp`, and `/health` require the token. Open the reader once with `/?token=...`; the server sets a same-site cookie and the reader stores the token for API calls. If you use nginx, Caddy, or cloudflared, proxy `/`, `/api/*`, `/sse`, `/messages`, `/mcp`, and `/.well-known/*` to the same local process and make sure streaming responses are not buffered.
 
+### Docker / Alibaba Cloud migration
+
+The repository includes a production `Dockerfile`. Mount one persistent volume
+at `/data` and set a strong `MCP_AUTH_TOKEN`; the container already sets
+`READING_MCP_DATA_DIR=/data` and listens on `PORT` (default `3100`). The same
+domain serves the reader UI, REST API, `/mcp`, and legacy `/sse` transport.
+
+To migrate an existing instance, stop writes to the old service and copy the
+entire configured `READING_MCP_DATA_DIR` into the new `/data` volume. This keeps
+book manifests and chunks together with `annotations.jsonl`, `submissions.jsonl`,
+`cards.jsonl`, `progress.json`, `reading_sessions.json`, and the recoverable
+`trash` directory. Do not copy only annotations or progress.
+
+For the private deployment, use `https://read.xunzhou.space` as the public
+reader URL and `https://read.xunzhou.space/mcp` as the MCP URL. Preserve the
+existing `MCP_AUTH_TOKEN` so the ChatGPT connection does not need a new secret.
+Keep the old volume until `reading_list_books`, progress, annotations, one chunk,
+and the browser reader have all been verified on the new instance.
+
 ## Import Books
 
 Plain text:
