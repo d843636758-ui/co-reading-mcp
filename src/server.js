@@ -451,7 +451,11 @@ function imageContent({ text, image }) {
 }
 
 export async function callTool(name, args = {}) {
-  switch (name) {
+  // ChatGPT custom MCP connections may namespace tool calls as
+  // "connection-id.tool-name". The advertised tool name is the final segment.
+  const normalizedName = String(name || "").split(".").pop();
+
+  switch (normalizedName) {
     case "reading_list_books":
       return textContent(await listBooks());
     case "reading_list_chunks":
@@ -518,7 +522,7 @@ export async function callTool(name, args = {}) {
     case "reading_get_progress":
       return textContent(await getProgress(args.bookId));
     default:
-      throw new Error(`Unknown tool: ${name}`);
+      throw new Error(`Unknown tool: ${normalizedName}`);
   }
 }
 
